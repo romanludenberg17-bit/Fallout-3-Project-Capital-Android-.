@@ -4,7 +4,7 @@
 
 Project Capital must not present the Kotlin folder picker as a game runtime. The Kotlin app is currently a prototype shell; it cannot execute `Fallout3.exe`, emulate the Windows registry, or run Gamebryo content.
 
-The first runtime candidate is OpenNV / OpenNevada, a clean-room C# + Godot implementation that reads a player's own game installation. The upstream project explicitly says Fallout 3 has bounded Vault 101 opening work, not a complete playable campaign. The Android fork targets New Vegas and its own Android bring-up notes distinguish launcher/rendering and cell preparation from verified ordinary gameplay.
+The first runtime candidate is OpenNV / OpenNevada, a clean-room C# + Godot implementation that reads a player's own game installation. The upstream project contains explicit Fallout 3 content/runtime paths, including standalone Fallout 3 installation detection and Vault 101 opening work, but it is not yet a complete verified Fallout 3 campaign. The Android fork is primarily validated around its Android bring-up and New Vegas-oriented runtime, so Fallout 3 still needs device acceptance.
 
 Pinned references reviewed on 2026-11-01:
 
@@ -21,8 +21,8 @@ These are source pins for reproducible evaluation, not a claim that the two comm
 ## Integration strategy
 
 1. Keep the user's game files external and read-only. Never commit executables, DLC, BSA archives, textures, audio, saves, or registry dumps.
-2. Build the Android fork as an isolated runtime candidate before merging code into this repository.
-3. Bring forward Android-specific changes selectively. Do not copy an old Android archive or replace newer gameplay/persistence owners wholesale.
+2. Build the pinned Android runtime candidate in CI before vendoring or rewriting its source.
+3. The current CI build consumes the pinned Android fork as a source dependency, then applies a Project Capital application identity overlay (`io.github.romanludenberg17.projectcapital`) before export.
 4. Make Godot/OpenNV the actual game process. Retire the Kotlin launcher as the game entry point only after Android export, SAF access, input, rendering, and cold-start tests pass.
 5. Add a SAF-to-runtime data provider. A `content://` URI is not a POSIX path; the runtime must read through Android document APIs or a verified private-storage staging layer. A string such as `Z:\\game\\` in preferences is not a mount.
 6. Implement a runtime-owned compatibility registry provider only for code paths that genuinely query Windows registry data. It must be backed by the selected install profile and validated against the official GOG `beth_registry.cmd` script. Android itself has no Windows Registry.
@@ -49,26 +49,21 @@ A green Kotlin launcher build only verifies the shell. A Godot launcher screen, 
 - The current Kotlin registry profile contains an assumed registry subkey. Do not treat it as authoritative until checked against the official GOG script and the runtime's actual registry access.
 - Commercial game content remains user-supplied. Do not upload it to this public repository.
 
-## References
-
-- https://github.com/nikamigaming-create/OpenNV
-- https://github.com/openconstruct/OpenNevada-Android
-- https://github.com/openconstruct/OpenNevada-Android/blob/main/docs/android-bringup.md
-- https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_android.html
-
-## Automated Android export attempt
+## Automated Android export
 
 The workflow `.github/workflows/android-runtime-export.yml` checks out the pinned
 Android candidate `openconstruct/OpenNevada-Android@d22b6c5ae5f83254e25ee9e311661299eb50da73`,
 installs the matching Godot Mono toolchain and Android SDK, builds the Android
-target, exports an ARM64 APK, and verifies package identity and ABI before
-publishing a short-lived Actions artifact.
+target, applies the Project Capital package identity, exports an ARM64 APK, and
+verifies the final package identity and ABI before publishing a short-lived
+Actions artifact.
 
 The export-template installer uses Godot's Mono-specific `4.7.2.stable.mono`
 template directory, matching the editor build. This keeps the CI check aligned
 with the actual Mono editor lookup rules.
 
-This is deliberately an isolated candidate export. It does not copy the runtime
-into the Kotlin app, does not implement a SAF bridge, and does not convert the
-candidate's New Vegas-oriented work into Fallout 3 campaign support. The first
-successful APK is only an export milestone.
+This is a source-built runtime candidate, not a wrapper around `Fallout3.exe`.
+The remaining blocker is the Android content bridge: the runtime currently expects
+a normal filesystem `--data-root`, while Android's Storage Access Framework returns
+`content://` trees. The next implementation step is that bridge, followed by real
+Fallout 3 Vault 101 device testing.
