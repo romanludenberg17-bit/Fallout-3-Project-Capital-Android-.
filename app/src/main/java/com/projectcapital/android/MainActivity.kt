@@ -23,7 +23,7 @@ class MainActivity : Activity() {
         private const val REQUEST_GAME_FOLDER = 4102
         private const val KEY_GAME_TREE = "game_tree_uri"
         private const val KEY_REGISTRY_PROFILE = "virtual_registry_profile"
-        private const val RUNTIME_MOUNT = """Z:\game\ """
+        private const val RUNTIME_MOUNT = """Z:\game\"""
     }
 
     private data class GameInstall(
