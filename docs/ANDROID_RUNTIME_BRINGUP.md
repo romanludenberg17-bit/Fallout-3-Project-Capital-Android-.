@@ -64,6 +64,10 @@ installs the matching Godot Mono toolchain and Android SDK, builds the Android
 target, exports an ARM64 APK, and verifies package identity and ABI before
 publishing a short-lived Actions artifact.
 
+The export-template installer uses Godot's Mono-specific `4.7.2.stable.mono`
+template directory, matching the editor build. This keeps the CI check aligned
+with the actual Mono editor lookup rules.
+
 This is deliberately an isolated candidate export. It does not copy the runtime
 into the Kotlin app, does not implement a SAF bridge, and does not convert the
 candidate's New Vegas-oriented work into Fallout 3 campaign support. The first
