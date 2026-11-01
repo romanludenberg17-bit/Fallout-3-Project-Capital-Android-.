@@ -72,6 +72,41 @@ jobs:
           echo "Installed Android export templates:"
           ls -lh "$TEMPLATE_DIR"/android_*.apk
 
+      - name: Prepare Android owned-install bridge
+        working-directory: runtime-candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          presets = Path("runtime/export_presets.cfg")
+          text = presets.read_text()
+          text = text.replace(
+              'command_line/extra_args="-- --launcher --auto-launch --skip-cutscenes --fixed-exposure --no-image-blur --no-double-vision --no-bloom --compact-quest-notices --render-scale-3d 0.5 --view-distance-meters 200 --performance-log --fps-overlay --verify-dds-cubemap"',
+              'command_line/extra_args="-- --launcher --auto-launch --skip-cutscenes --fixed-exposure --no-image-blur --no-double-vision --no-bloom --compact-quest-notices --render-scale-3d 0.5 --view-distance-meters 200 --performance-log --fps-overlay --verify-dds-cubemap"\npermissions/manage_external_storage=true\npermissions/read_external_storage=true\npermissions/write_external_storage=true',
+              1,
+          )
+          presets.write_text(text)
+
+          store = Path("runtime/src/Presentation/Ui/GodotLauncherProfileStore.cs")
+          text = store.read_text()
+          old = '''    internal static GodotLauncherProfileStore Load()\n    {\n        var path = ProjectSettings.GlobalizePath("user://launcher/profiles-v1.json");\n        var store = Open(path, ProjectSettings.GlobalizePath("user://profiles"));\n        store.ImportLegacyRegistrations();\n        return store;\n    }'''
+          new = '''    internal static GodotLauncherProfileStore Load()\n    {\n        var path = ProjectSettings.GlobalizePath("user://launcher/profiles-v1.json");\n        var store = Open(path, ProjectSettings.GlobalizePath("user://profiles"));\n        store.ImportLegacyRegistrations();\n        store.ImportAndroidOwnedFallout3Folder();\n        return store;\n    }'''
+          if old not in text:
+              raise SystemExit("GodotLauncherProfileStore.Load block not found")
+          text = text.replace(old, new, 1)
+
+          marker = '''    private bool ImportDataRegistration(string legacyRoot, string campaignId, string fileName)\n'''
+          method = '''    private void ImportAndroidOwnedFallout3Folder()\n    {\n        if (!OperatingSystem.IsAndroid() || _profiles.ContainsKey("fallout3"))\n            return;\n\n        const string defaultRoot = "/storage/emulated/0/ProjectCapital/Fallout3";\n        try\n        {\n            var installation = NativeGameInstallation.Detect(defaultRoot);\n            if (installation.Game != NativeGame.Fallout3)\n                return;\n            _profiles["fallout3"] = new GodotLauncherProfile(\n                "fallout3",\n                installation.InstallRoot,\n                SavePath("fallout3"));\n            _lastCampaignId = "fallout3";\n            Persist();\n            GD.Print($"OPENNV_ANDROID_FO3_PROFILE path={installation.InstallRoot}");\n        }\n        catch (Exception exception) when (\n            exception is DirectoryNotFoundException or InvalidDataException or IOException or UnauthorizedAccessException)\n        {\n            GD.Print($"OPENNV_ANDROID_FO3_PROFILE unavailable path={defaultRoot} reason={exception.Message}");\n        }\n    }\n\n'''
+          if marker not in text:
+              raise SystemExit("profile insertion marker not found")
+          text = text.replace(marker, method + marker, 1)
+          store.write_text(text)
+          PY
+          grep -Fq 'permissions/manage_external_storage=true' runtime/export_presets.cfg
+          grep -Fq 'ImportAndroidOwnedFallout3Folder' runtime/src/Presentation/Ui/GodotLauncherProfileStore.cs
+
       - name: Brand runtime for Project Capital
         working-directory: runtime-candidate
         shell: bash
