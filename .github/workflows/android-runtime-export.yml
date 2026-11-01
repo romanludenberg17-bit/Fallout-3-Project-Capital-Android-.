@@ -93,11 +93,12 @@ jobs:
           APK_ANALYZER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name apkanalyzer -print -quit)"
           test -n "$APK_ANALYZER"
           APP_ID="$("$APK_ANALYZER" manifest application-id "$APK")"
-          printf 'Application ID: %s\n' "$APP_ID"
+          printf 'Application ID: %s\\n' "$APP_ID"
           test "$APP_ID" = "io.github.openconstruct.opennevada"
           unzip -Z1 "$APK" | tee "$RUNNER_TEMP/apk-files.txt"
           grep -q '^lib/arm64-v8a/' "$RUNNER_TEMP/apk-files.txt"
-          grep -q '^lib/arm64-v8a/libgodot_android.so
+          grep -q 'lib/arm64-v8a/libgodot_android.so' "$RUNNER_TEMP/apk-files.txt"
+
       - name: Upload experimental APK
         uses: actions/upload-artifact@v4
         with:
