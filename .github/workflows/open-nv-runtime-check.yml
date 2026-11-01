@@ -33,7 +33,7 @@ jobs:
 
       - name: Build OpenNV solution
         working-directory: .runtime/OpenNV
-        run: dotnet build runtime/OpenNV.sln --configuration Release --no-restore
+        run: dotnet build runtime/OpenNV.sln --configuration Release
 
       - name: Record source pin
         run: |
