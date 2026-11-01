@@ -1,0 +1,97 @@
+name: Android runtime export (experimental)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["engine/**"]
+    paths:
+      - ".github/workflows/android-runtime-export.yml"
+      - "docs/ANDROID_RUNTIME_BRINGUP.md"
+
+permissions:
+  contents: read
+
+jobs:
+  export-arm64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout Project Capital
+        uses: actions/checkout@v4
+
+      - name: Checkout Android runtime candidate
+        uses: actions/checkout@v4
+        with:
+          repository: openconstruct/OpenNevada-Android
+          ref: d22b6c5ae5f83254e25ee9e311661299eb50da73
+          path: runtime-candidate
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.311
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: |
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
+
+      - name: Download Godot Mono editor and export templates
+        run: |
+          mkdir -p "$RUNNER_TEMP/godot" "$HOME/.local/share/godot/export_templates/4.7.2.stable"
+          curl -fL "https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_linux_x86_64.zip" -o "$RUNNER_TEMP/godot/editor.zip"
+          unzip -q "$RUNNER_TEMP/godot/editor.zip" -d "$RUNNER_TEMP/godot/editor"
+          GODOT_BIN="$(find "$RUNNER_TEMP/godot/editor" -type f -name 'Godot_*_mono_linux.x86_64' -print -quit)"
+          test -n "$GODOT_BIN"
+          chmod +x "$GODOT_BIN"
+          echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
+          curl -fL "https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_export_templates.tpz" -o "$RUNNER_TEMP/godot/templates.tpz"
+          unzip -q "$RUNNER_TEMP/godot/templates.tpz" -d "$RUNNER_TEMP/godot/templates"
+          find "$RUNNER_TEMP/godot/templates" -type f -name 'android_*' -exec cp {} "$HOME/.local/share/godot/export_templates/4.7.2.stable/" \;
+          ls -lah "$HOME/.local/share/godot/export_templates/4.7.2.stable"
+
+      - name: Restore and build Android-targeted C# project
+        working-directory: runtime-candidate
+        run: |
+          dotnet restore runtime/OpenNV.csproj -p:GodotTargetPlatform=android
+          dotnet build runtime/OpenNV.csproj --configuration Release --no-restore -p:GodotTargetPlatform=android
+
+      - name: Validate Android export preset
+        working-directory: runtime-candidate
+        run: |
+          "$GODOT_BIN" --headless --editor --path runtime --quit
+          "$GODOT_BIN" --headless --path runtime --export-debug "Android Handheld Experimental" "$RUNNER_TEMP/OpenNevada-Android-arm64.apk"
+
+      - name: Verify APK package and ABI
+        run: |
+          test -s "$RUNNER_TEMP/OpenNevada-Android-arm64.apk"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$RUNNER_TEMP/OpenNevada-Android-arm64.apk" | tee "$RUNNER_TEMP/apk-badging.txt"
+          grep -q "io.github.openconstruct.opennevada" "$RUNNER_TEMP/apk-badging.txt"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$RUNNER_TEMP/OpenNevada-Android-arm64.apk" | grep -q "native-code: 'arm64-v8a'"
+
+      - name: Upload experimental APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: opennv-android-arm64-experimental
+          path: ${{ runner.temp }}/OpenNevada-Android-arm64.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Record limits
+        if: always()
+        run: |
+          {
+            echo "This job exports the Android New Vegas-oriented OpenNevada candidate."
+            echo "It does not establish Fallout 3 campaign support, SAF integration, touch-control integration, or device performance."
+            echo "Pinned source: openconstruct/OpenNevada-Android@d22b6c5ae5f83254e25ee9e311661299eb50da73"
+          } >> "$GITHUB_STEP_SUMMARY"
