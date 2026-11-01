@@ -270,7 +270,7 @@ jobs:
           super.onDestroy();
           }
           }
-''')
+          ''')
           PY
           grep -Fq 'gradle_build/use_gradle_build=true' runtime/export_presets.cfg
           grep -Fq 'REQUEST_GAME_TREE' runtime/android/build/src/com/godot/game/GodotApp.java
