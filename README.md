@@ -32,11 +32,12 @@ Until that adapter and a compatible engine/runtime exist, the profile is configu
 
 ## Architecture roadmap
 1. Stabilize installation detection and persistent SAF access.
-2. Complete touch controls and input mapping.
-3. Select and validate a compatible Fallout engine codebase and its license.
-4. Implement the Android/ARM64 platform layer: filesystem, registry compatibility, input, audio, threading, and graphics.
-5. Add Vulkan rendering and validate against user-provided game data.
-6. Test new game, save/load, cell transitions, frame pacing, memory use, and long-session stability.
+2. Evaluate OpenNV as the first engine candidate; its upstream has bounded Fallout 3 Vault 101 work, but no complete Fallout 3 campaign. See [engine evaluation](docs/ENGINE_EVALUATION.md).
+3. Verify Fallout 3 formats and the Vault 101 opening before pinning/importing any runtime code.
+4. Choose the product architecture: Godot/C# runtime as the Android app entry point, or a separately scoped native port.
+5. Implement SAF-backed read-only game data, app-private saves/config/cache, and the runtime's actual registry API compatibility.
+6. Add/verify ARM64 mobile rendering, touch/input, audio, and Vulkan performance.
+7. Test new game, save/load, cell transitions, frame pacing, memory use, and 30–60 minute stability.
 
 ## Build
 Open in Android Studio (Ladybug or newer), or run **Android CI** in GitHub Actions and download the `project-capital-debug-apk` artifact.
