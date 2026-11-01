@@ -91,9 +91,10 @@ class MainActivity : Activity() {
         }
         right.addView(launch.apply { setPadding(0, dp(8), 0, dp(8)) })
 
-        val settings = button("TOUCH CONTROLS  ·  COMING SOON", Color.rgb(62, 72, 77))
-        settings.isEnabled = false
-        settings.alpha = 0.65f
+        val settings = button("CUSTOMIZE TOUCH CONTROLS", Color.rgb(62, 88, 77))
+        settings.setOnClickListener {
+            startActivity(Intent(this, TouchControlsActivity::class.java))
+        }
         right.addView(settings)
 
         status = text("select your Fallout 3 installation folder to begin", 12, Color.LTGRAY)
