@@ -83,14 +83,13 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          import base64
+          import re
 
           presets = Path('runtime/export_presets.cfg')
           text = presets.read_text()
           text = text.replace('gradle_build/use_gradle_build=false', 'gradle_build/use_gradle_build=true', 1)
           text = text.replace('package/unique_name="io.github.openconstruct.opennevada"', 'package/unique_name="io.github.romanludenberg17.projectcapital"', 1)
           text = text.replace('package/name="OpenNevada Experimental"', 'package/name="Project Capital Experimental"', 1)
-          text = text.replace('command_line/extra_args="-- --launcher --auto-launch', 'command_line/extra_args="-- --launcher --auto-launch', 1)
           presets.write_text(text)
 
           project = Path('runtime/project.godot')
@@ -98,7 +97,7 @@ jobs:
 
           store = Path('runtime/src/Presentation/Ui/GodotLauncherProfileStore.cs')
           text = store.read_text()
-          text = text.replace('''        store.ImportLegacyRegistrations();\n        return store;''', '''        store.ImportLegacyRegistrations();\n        store.ImportAndroidOwnedFallout3Folder();\n        return store;''', 1)
+          text = text.replace('store.ImportLegacyRegistrations();\n        return store;', 'store.ImportLegacyRegistrations();\n        store.ImportAndroidOwnedFallout3Folder();\n        return store;', 1)
           marker = '    private bool ImportDataRegistration(string legacyRoot, string campaignId, string fileName)\n'
           method = '''    private void ImportAndroidOwnedFallout3Folder()\n    {\n        if (!OperatingSystem.IsAndroid() || _profiles.ContainsKey("fallout3")) return;\n        var marker = ProjectSettings.GlobalizePath("user://fallout3-install-path.txt");\n        try\n        {\n            if (!File.Exists(marker)) return;\n            var root = File.ReadAllText(marker).Trim();\n            if (string.IsNullOrWhiteSpace(root)) return;\n            var installation = NativeGameInstallation.Detect(root);\n            if (installation.Game != NativeGame.Fallout3) return;\n            _profiles["fallout3"] = new GodotLauncherProfile("fallout3", installation.InstallRoot, SavePath("fallout3"));\n            _lastCampaignId = "fallout3";\n            Persist();\n            GD.Print($"OPENNV_ANDROID_FO3_PROFILE path={installation.InstallRoot}");\n        }\n        catch (Exception e) when (e is DirectoryNotFoundException or InvalidDataException or IOException or UnauthorizedAccessException)\n        {\n            GD.Print($"OPENNV_ANDROID_FO3_PROFILE unavailable reason={e.Message}");\n        }\n    }\n\n'''
           if marker not in text: raise SystemExit('profile insertion marker not found')
@@ -106,11 +105,174 @@ jobs:
           store.write_text(text)
 
           activity = Path('runtime/android/build/src/com/godot/game/GodotApp.java')
-          encoded = '''cGFja2FnZSBjb20uZ29kb3QuZ2FtZTsKaW1wb3J0IGFuZHJvaWQuYXBwLkFjdGl2aXR5OwppbXBvcnQgYW5kcm9pZC5jb250ZW50LkludGVudDsKaW1wb3J0IGFuZHJvaWQubmV0LlVyaTsKaW1wb3J0IGFuZHJvaWQub3MuQnVuZGxlOwppbXBvcnQgYW5kcm9pZC5vcy5IYW5kbGVyOwppbXBvcnQgYW5kcm9pZC5vcy5Mb29wZXI7CmltcG9ydCBhbmRyb2lkLndpZGdldC5Ub2FzdDsKaW1wb3J0IGFuZHJvaWR4LmRvY3VtZW50ZmlsZS5wcm92aWRlci5Eb2N1bWVudEZpbGU7CmltcG9ydCBvcmcuZ29kb3RlbmdpbmUuZ29kb3QuR29kb3RBY3Rpdml0eTsKaW1wb3J0IGphdmEuaW8uKjsKaW1wb3J0IGphdmEudXRpbC5jb25jdXJyZW50Lio7CnB1YmxpYyBjbGFzcyBHb2RvdEFwcCBleHRlbmRzIEdvZG90QWN0aXZpdHkgewogcHJpdmF0ZSBzdGF0aWMgZmluYWwgaW50IFJFUT00NzAzOwogcHJpdmF0ZSBmaW5hbCBFeGVjdXRvclNlcnZpY2UgZXg9RXhlY3V0b3JzLm5ld1NpbmdsZVRocmVhZEV4ZWN1dG9yKCk7CiBwcml2YXRlIGZpbmFsIEhhbmRsZXIgaD1uZXcgSGFuZGxlcihMb29wZXIuZ2V0TWFpbkxvb3BlcigpKTsKIEBPdmVycmlkZSBwdWJsaWMgdm9pZCBvbkNyZWF0ZShCdW5kbGUgYil7c2V0VGhlbWUoUi5zdHlsZS5Hb2RvdEFwcE1haW5UaGVtZSk7c3VwZXIub25DcmVhdGUoYik7aWYoYj09bnVsbCYmIWhhc0dhbWUoKSloLnBvc3REZWxheWVkKHRoaXM6OnBpY2ssMTIwMCk7fQogcHJpdmF0ZSBGaWxlIG1hcmtlcigpe3JldHVybiBuZXcgRmlsZShnZXRGaWxlc0RpcigpLCJmYWxsb3V0My1pbnN0YWxsLXBhdGgudHh0Iik7fQogcHJpdmF0ZSBib29sZWFuIGhhc0dhbWUoKXtTdHJpbmcgcD1yZWFkKG1hcmtlcigpKTtpZihwPT1udWxsKXJldHVybiBmYWxzZTtGaWxlIHI9bmV3IEZpbGUocCk7cmV0dXJuIG5ldyBGaWxlKHIsIkZhbGxvdXQzLmV4ZSIpLmlzRmlsZSgpJiZuZXcgRmlsZShyLCJEYXRhIikuaXNEaXJlY3RvcnkoKTt9CiBwcml2YXRlIHZvaWQgcGljaygpe0ludGVudCBpPW5ldyBJbnRlbnQoSW50ZW50LkFDVElPTl9PUEVOX0RPQ1VNRU5UX1RSRUUpO2kuYWRkRmxhZ3MoSW50ZW50LkZMQUdfR1JBTlRfUkVBRF9VUklfUEVSTUlTU0lPTnxJbnRlbnQuRkxBR19HUkFOVF9QRVJTSVNUQUJMRV9VUklfUEVSTUlTU0lPTik7c3RhcnRBY3Rpdml0eUZvclJlc3VsdChpLFJFUSk7fQogQE92ZXJyaWRlIHByb3RlY3RlZCB2b2lkIG9uQWN0aXZpdHlSZXN1bHQoaW50IHIsaW50IGMsSW50ZW50IGQpe3N1cGVyLm9uQWN0aXZpdHlSZXN1bHQocixjLGQpO2lmKHIhPVJFUXx8YyE9QWN0aXZpdHkuUkVTVUxUX09LfHxkPT1udWxsfHxkLmdldERhdGEoKT09bnVsbClyZXR1cm47VXJpIHU9ZC5nZXREYXRhKCk7dHJ5e2dldENvbnRlbnRSZXNvbHZlcigpLnRha2VQZXJzaXN0YWJsZVVyaVBlcm1pc3Npb24odSxkLmdldEZsYWdzKCkmSW50ZW50LkZMQUdfR1JBTlRfUkVBRF9VUklfUEVSTUlTU0lPTik7fWNhdGNoKFNlY3VyaXR5RXhjZXB0aW9uIGlnbm9yZWQpe31Ub2FzdC5tYWtlVGV4dCh0aGlzLCJpbXBvcnRpbmcgRmFsbG91dCAzIGZpbGVzLi4uIixUb2FzdC5MRU5HVEhfTE9ORykuc2hvdygpO2V4LmV4ZWN1dGUoKCktPnt0cnl7RG9jdW1lbnRGaWxlIHJvb3Q9RG9jdW1lbnRGaWxlLmZyb21UcmVlVXJpKHRoaXMsdSk7aWYocm9vdD09bnVsbHx8IXJvb3QuaXNEaXJlY3RvcnkoKSl0aHJvdyBuZXcgSU9FeGNlcHRpb24oIm5vdCBhIGZvbGRlciIpO0RvY3VtZW50RmlsZSBleGU9cm9vdC5maW5kRmlsZSgiRmFsbG91dDMuZXhlIiksZGF0YT1yb290LmZpbmRGaWxlKCJEYXRhIik7aWYoZXhlPT1udWxsfHwhZXhlLmlzRmlsZSh8fGRhdGE9PW51bGx8fCFkYXRhLmlzRGlyZWN0b3J5KCkpIHRocm93IG5ldyBJT0V4Y2VwdGlvbigiRmFsbG91dDMuZXhlIGFuZCBEYXRhLyBhcmUgcmVxdWlyZWQiKTtGaWxlIHRhcmdldD1uZXcgRmlsZShnZXRFeHRlcm5hbEZpbGVzRGlyKG51bGwpLCJGYWxsb3V0MyIpO2lmKHRhcmdldC5leGlzdHMoKSlkZWwodGFyZ2V0KTtpZighdGFyZ2V0Lm1rZGlycygpJiYhdGFyZ2V0LmlzRGlyZWN0b3J5KCkpdGhyb3cgbmV3IElPRXhjZXB0aW9uKCJjYW5ub3QgY3JlYXRlIGltcG9ydCBkaXJlY3RvcnkiKTtjb3B5KHJvb3QsdGFyZ2V0KTt3cml0ZShtYXJrZXIoKSx0YXJnZXQuZ2V0QWJzb2x1dGVQYXRoKCkpO2gucG9zdCgoKS0+e1RvYXN0Lm1ha2VUZXh0KHRoaXMsIkZhbGxvdXQgMyBpbXBvcnRlZC4gcmVzdGFydGluZy4uLiIsVG9hc3QuTEVOR1RIX0xPTkcpLnNob3coKTtoLnBvc3REZWxheWVkKHRoaXM6OnJlY3JlYXRlLDkwMCk7fSk7fWNhdGNoKEV4Y2VwdGlvbiBlKXtoLnBvc3QoKCktPlRvYXN0Lm1ha2VUZXh0KHRoaXMsIkZhbGxvdXQgMyBpbXBvcnQgZmFpbGVkOiAiK2UuZ2V0TWVzc2FnZSgpLFRvYXN0LkxFTkdUSF9MT05HKS5zaG93KCkpO319KTt9CiBwcml2YXRlIHZvaWQgY29weShEb2N1bWVudEZpbGUgcyxGaWxlIHQpdGhyb3dzIElPRXhjZXB0aW9ue2ZvcihEb2N1bWVudEZpbGUgYzpzLmxpc3RGaWxlcygpKXtTdHJpbmcgbj1jLmdldE5hbWUoKTtpZihuPT1udWxsfHxuLmNvbnRhaW5zKCIvIikpY29udGludWU7RmlsZSBvPW5ldyBGaWxlKHQsbik7aWYoYy5pc0RpcmVjdG9yeSgpe2lmKCFvLm1rZGlycygpJiYhby5pc0RpcmVjdG9yeSgpKXRocm93IG5ldyBJT0V4Y2VwdGlvbigiY2Fubm90IGNyZWF0ZSAiK28pO2NvcHkoYyxvKTt9ZWxzZSBpZihjLmlzRmlsZSgpe3RyeShJbnB1dFN0cmVhbSBpbj1uZXcgQnVmZmVyZWRJbnB1dFN0cmVhbShnZXRDb250ZW50UmVzb2x2ZXIoKS5vcGVuSW5wdXRTdHJlYW0oYy5nZXRVcmkoKSk7T3V0cHV0U3RyZWFtIG91dD1uZXcgQnVmZmVyZWRPdXRwdXRTcmVhbShuZXcgRmlsZU91dHB1dFN0cmVhbShvKSkpe2lmKGluPT1udWxsKXRocm93IG5ldyBJT0V4Y2VwdGlvbigiY2Fubm90IG9wZW4gZmlsZSIpO2J5dGVbWQpYj1uZXcgYnl0ZVsxMDI0KjEwMjRdO2ludCBuMjt3aGlsZSgobjI9aW4ucmVhZChiKSkhPS0xKW91dC53cml0ZShiLDAsbjIpO319fX0KIHByaXZhdGUgc3RhdGljIHZvaWQgZGVsKEZpbGUgZil7aWYoZi5pc0RpcmVjdG9yeSgpe0ZpbGVbXSBhPWYubGlzdEZpbGVzKCk7aWYoYSE9bnVsbClmb3IoRmlsZSB4OmEpZGVsKHgpO31mLmRlbGV0ZSgpO30KIHByaXZhdGUgc3RhdGljIFN0cmluZyByZWFkKEZpbGUgZil7dHJ5e3JldHVybiBuZXcgU3RyaW5nKGphdmEubmlvLmZpbGUuRmlsZXMucmVhZEFsbEJ5dGVzKGYudG9QYXRoKCkpLGphdmEubmlvLmNoYXJzZXQuU3RhbmRhcmRDaGFyc2V0cy5VVEYtOCkudHJpbSgpO31jYXRjaChJT0V4Y2VwdGlvbiBlKXtyZXR1cm4gbnVsbDt9fQogcHJpdmF0ZSBzdGF0aWMgdm9pZCB3cml0ZShGaWxlIGYsU3RyaW5nIHMpdGhyb3dzIElPRXhjZXB0aW9ue3RyeShGaWxlT3V0cHV0U3RyZWFtIG89bmV3IEZpbGVPdXRwdXRTdHJlYW0oZikpe28ud3JpdGUocy5nZXRCeXRlcyhqYXZhLm5pby5jaGFyc2V0LlN0YW5kYXJkQ2hhcnNldHMuVVRGXzgpKTt9fQogQE92ZXJyaWRlIHByb3RlY3RlZCB2b2lkIG9uRGVzdHJveSgpe2V4LnNodXRkb3duTm93KCk7c3VwZXIub25EZXN0cm95KCk7fX0='''
-          activity.write_bytes(base64.b64decode(encoded))
+          activity.write_text(r'''package com.godot.game;
+
+import android.app.Activity;
+import android.content.Intent;
+import android.database.Cursor;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.DocumentsContract;
+import android.provider.OpenableColumns;
+import android.widget.Toast;
+
+import org.godotengine.godot.GodotActivity;
+
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
+public class GodotApp extends GodotActivity {
+    private static final int REQUEST_GAME_TREE = 4703;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        setTheme(R.style.GodotAppMainTheme);
+        super.onCreate(savedInstanceState);
+        if (savedInstanceState == null && !hasImportedFallout3()) {
+            mainHandler.postDelayed(this::openGameFolderPicker, 1200);
+        }
+    }
+
+    private File importMarker() {
+        return new File(getFilesDir(), "fallout3-install-path.txt");
+    }
+
+    private boolean hasImportedFallout3() {
+        String path = readText(importMarker());
+        if (path == null || path.isEmpty()) return false;
+        File root = new File(path);
+        return new File(root, "Fallout3.exe").isFile() && new File(root, "Data").isDirectory();
+    }
+
+    private void openGameFolderPicker() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(intent, REQUEST_GAME_TREE);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_GAME_TREE || resultCode != Activity.RESULT_OK || data == null || data.getData() == null) return;
+        Uri treeUri = data.getData();
+        try {
+            int takeFlags = data.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION;
+            getContentResolver().takePersistableUriPermission(treeUri, takeFlags);
+        } catch (SecurityException ignored) {
+        }
+        Toast.makeText(this, "importing Fallout 3 files...", Toast.LENGTH_LONG).show();
+        new Thread(() -> {
+            try {
+                validateRoot(treeUri);
+                File target = new File(getExternalFilesDir(null), "Fallout3");
+                if (target.exists()) deleteRecursively(target);
+                if (!target.mkdirs() && !target.isDirectory()) throw new IOException("cannot create import directory");
+                copyDocumentTree(treeUri, target);
+                writeText(importMarker(), target.getAbsolutePath());
+                mainHandler.post(() -> {
+                    Toast.makeText(this, "Fallout 3 imported. restarting...", Toast.LENGTH_LONG).show();
+                    mainHandler.postDelayed(this::recreate, 900);
+                });
+            } catch (Exception e) {
+                mainHandler.post(() -> Toast.makeText(this, "Fallout 3 import failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        }, "fallout3-import").start();
+    }
+
+    private void validateRoot(Uri treeUri) throws IOException {
+        Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri));
+        boolean exe = false;
+        boolean data = false;
+        try (Cursor cursor = getContentResolver().query(children,
+                new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE},
+                null, null, null)) {
+            if (cursor == null) throw new IOException("cannot enumerate selected folder");
+            int nameCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME);
+            int mimeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE);
+            while (cursor.moveToNext()) {
+                String name = cursor.getString(nameCol);
+                String mime = cursor.getString(mimeCol);
+                if ("Fallout3.exe".equals(name)) exe = true;
+                if ("Data".equals(name) && DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) data = true;
+            }
+        }
+        if (!exe || !data) throw new IOException("Fallout3.exe and Data/ are required at the selected folder root");
+    }
+
+    private void copyDocumentTree(Uri treeUri, File target) throws IOException {
+        Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri));
+        try (Cursor cursor = getContentResolver().query(children,
+                new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE},
+                null, null, null)) {
+            if (cursor == null) throw new IOException("cannot enumerate selected folder");
+            int idCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID);
+            int nameCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME);
+            int mimeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE);
+            while (cursor.moveToNext()) {
+                String id = cursor.getString(idCol);
+                String name = cursor.getString(nameCol);
+                String mime = cursor.getString(mimeCol);
+                if (name == null || name.contains("/")) continue;
+                Uri child = DocumentsContract.buildDocumentUriUsingTree(treeUri, id);
+                File out = new File(target, name);
+                if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
+                    if (!out.mkdirs() && !out.isDirectory()) throw new IOException("cannot create " + out);
+                    copyDocumentTree(child, out);
+                } else {
+                    try (InputStream in = new BufferedInputStream(getContentResolver().openInputStream(child));
+                         OutputStream os = new BufferedOutputStream(new FileOutputStream(out))) {
+                        if (in == null) throw new IOException("cannot open " + child);
+                        byte[] buffer = new byte[1024 * 1024];
+                        int count;
+                        while ((count = in.read(buffer)) != -1) os.write(buffer, 0, count);
+                    }
+                }
+            }
+        }
+    }
+
+    private static void deleteRecursively(File file) {
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) for (File child : children) deleteRecursively(child);
+        }
+        file.delete();
+    }
+
+    private static String readText(File file) {
+        try {
+            byte[] data = java.nio.file.Files.readAllBytes(file.toPath());
+            return new String(data, java.nio.charset.StandardCharsets.UTF_8).trim();
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private static void writeText(File file, String value) throws IOException {
+        try (FileOutputStream out = new FileOutputStream(file)) {
+            out.write(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+    }
+}
+''')
           PY
           grep -Fq 'gradle_build/use_gradle_build=true' runtime/export_presets.cfg
           grep -Fq 'REQUEST_GAME_TREE' runtime/android/build/src/com/godot/game/GodotApp.java
+          grep -Fq 'DocumentsContract' runtime/android/build/src/com/godot/game/GodotApp.java
           grep -Fq 'ImportAndroidOwnedFallout3Folder' runtime/src/Presentation/Ui/GodotLauncherProfileStore.cs
 
       - name: Restore and build Android C# project
@@ -124,7 +286,9 @@ jobs:
         working-directory: runtime-candidate
         run: |
           set -euo pipefail
-          "$GODOT_BIN" --headless --path runtime --export-debug "Android Handheld Experimental" "$RUNNER_TEMP/Project-Capital-Android-arm64.apk"
+          APK="$RUNNER_TEMP/Project-Capital-Android-arm64.apk"
+          "$GODOT_BIN" --headless --path runtime --export-debug "Android Handheld Experimental" "$APK"
+          test -s "$APK"
 
       - name: Verify APK
         run: |
