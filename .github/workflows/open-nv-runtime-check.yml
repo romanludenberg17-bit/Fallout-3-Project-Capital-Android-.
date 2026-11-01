@@ -1,0 +1,42 @@
+name: OpenNV runtime source check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master, "engine/**" ]
+    paths:
+      - "docs/ANDROID_RUNTIME_BRINGUP.md"
+      - ".github/workflows/open-nv-runtime-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-upstream-runtime:
+    name: Build pinned OpenNV runtime
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Project Capital
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned OpenNV source
+        uses: actions/checkout@v4
+        with:
+          repository: nikamigaming-create/OpenNV
+          ref: 4870bbd8a7ea3dce503f9553da12578a648d0096
+          path: .runtime/OpenNV
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.311
+
+      - name: Build OpenNV solution
+        working-directory: .runtime/OpenNV
+        run: dotnet build runtime/OpenNV.sln --configuration Release --no-restore
+
+      - name: Record source pin
+        run: |
+          echo "OpenNV upstream: nikamigaming-create/OpenNV" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit: 4870bbd8a7ea3dce503f9553da12578a648d0096" >> "$GITHUB_STEP_SUMMARY"
+          echo "This validates a desktop .NET build only; it is not an Android export or Fallout 3 gameplay test." >> "$GITHUB_STEP_SUMMARY"
