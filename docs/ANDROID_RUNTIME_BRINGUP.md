@@ -55,3 +55,16 @@ A green Kotlin launcher build only verifies the shell. A Godot launcher screen, 
 - https://github.com/openconstruct/OpenNevada-Android
 - https://github.com/openconstruct/OpenNevada-Android/blob/main/docs/android-bringup.md
 - https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_android.html
+
+## Automated Android export attempt
+
+The workflow `.github/workflows/android-runtime-export.yml` checks out the pinned
+Android candidate `openconstruct/OpenNevada-Android@d22b6c5ae5f83254e25ee9e311661299eb50da73`,
+installs the matching Godot Mono toolchain and Android SDK, builds the Android
+target, exports an ARM64 APK, and verifies package identity and ABI before
+publishing a short-lived Actions artifact.
+
+This is deliberately an isolated candidate export. It does not copy the runtime
+into the Kotlin app, does not implement a SAF bridge, and does not convert the
+candidate's New Vegas-oriented work into Fallout 3 campaign support. The first
+successful APK is only an export milestone.
