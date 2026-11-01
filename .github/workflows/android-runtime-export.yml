@@ -53,6 +53,7 @@ jobs:
 
       - name: Download Godot Mono editor and export templates
         run: |
+          set -euo pipefail
           mkdir -p "$RUNNER_TEMP/godot" "$HOME/.local/share/godot/export_templates/4.7.2.stable"
           curl -fL "https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_linux_x86_64.zip" -o "$RUNNER_TEMP/godot/editor.zip"
           unzip -q "$RUNNER_TEMP/godot/editor.zip" -d "$RUNNER_TEMP/godot/editor"
@@ -63,7 +64,9 @@ jobs:
           curl -fL "https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_export_templates.tpz" -o "$RUNNER_TEMP/godot/templates.tpz"
           unzip -q "$RUNNER_TEMP/godot/templates.tpz" -d "$RUNNER_TEMP/godot/templates"
           find "$RUNNER_TEMP/godot/templates" -type f -name 'android_*' -exec cp {} "$HOME/.local/share/godot/export_templates/4.7.2.stable/" \;
-          ls -lah "$HOME/.local/share/godot/export_templates/4.7.2.stable"
+          test -s "$HOME/.local/share/godot/export_templates/4.7.2.stable/android_debug.apk"
+          test -s "$HOME/.local/share/godot/export_templates/4.7.2.stable/android_release.apk"
+          test -s "$HOME/.local/share/godot/export_templates/4.7.2.stable/android_source.zip"
 
       - name: Restore and build Android-targeted C# project
         working-directory: runtime-candidate
@@ -71,18 +74,23 @@ jobs:
           dotnet restore runtime/OpenNV.csproj -p:GodotTargetPlatform=android
           dotnet build runtime/OpenNV.csproj --configuration Release --no-restore -p:GodotTargetPlatform=android
 
-      - name: Validate Android export preset
+      - name: Export Android ARM64 APK
         working-directory: runtime-candidate
         run: |
-          "$GODOT_BIN" --headless --editor --path runtime --quit
+          set -euo pipefail
+          test -f runtime/project.godot
+          test -f runtime/export_presets.cfg
+          grep -Fq 'name="Android Handheld Experimental"' runtime/export_presets.cfg
+          grep -Fq 'architectures/arm64-v8a=true' runtime/export_presets.cfg
           "$GODOT_BIN" --headless --path runtime --export-debug "Android Handheld Experimental" "$RUNNER_TEMP/OpenNevada-Android-arm64.apk"
 
       - name: Verify APK package and ABI
         run: |
+          set -euo pipefail
           test -s "$RUNNER_TEMP/OpenNevada-Android-arm64.apk"
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$RUNNER_TEMP/OpenNevada-Android-arm64.apk" | tee "$RUNNER_TEMP/apk-badging.txt"
           grep -q "io.github.openconstruct.opennevada" "$RUNNER_TEMP/apk-badging.txt"
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$RUNNER_TEMP/OpenNevada-Android-arm64.apk" | grep -q "native-code: 'arm64-v8a'"
+          grep -q "native-code: 'arm64-v8a'" "$RUNNER_TEMP/apk-badging.txt"
 
       - name: Upload experimental APK
         uses: actions/upload-artifact@v4
