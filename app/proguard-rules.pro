@@ -1,0 +1,1 @@
+# Project Capital ProGuard rules
