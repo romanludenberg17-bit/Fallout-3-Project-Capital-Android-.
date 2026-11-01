@@ -88,10 +88,33 @@ jobs:
       - name: Verify APK package and ABI
         run: |
           set -euo pipefail
-          test -s "$RUNNER_TEMP/OpenNevada-Android-arm64.apk"
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$RUNNER_TEMP/OpenNevada-Android-arm64.apk" | tee "$RUNNER_TEMP/apk-badging.txt"
-          grep -q "io.github.openconstruct.opennevada" "$RUNNER_TEMP/apk-badging.txt"
-          grep -q "native-code: 'arm64-v8a'" "$RUNNER_TEMP/apk-badging.txt"
+          APK="$RUNNER_TEMP/OpenNevada-Android-arm64.apk"
+          test -s "$APK"
+          APK_ANALYZER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name apkanalyzer -print -quit)"
+          test -n "$APK_ANALYZER"
+          APP_ID="$("$APK_ANALYZER" manifest application-id "$APK")"
+          printf 'Application ID: %s\n' "$APP_ID"
+          test "$APP_ID" = "io.github.openconstruct.opennevada"
+          unzip -Z1 "$APK" | tee "$RUNNER_TEMP/apk-files.txt"
+          grep -q '^lib/arm64-v8a/' "$RUNNER_TEMP/apk-files.txt"
+          grep -q '^lib/arm64-v8a/libgodot_android.so
+      - name: Upload experimental APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: opennv-android-arm64-experimental
+          path: ${{ runner.temp }}/OpenNevada-Android-arm64.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Record limits
+        if: always()
+        run: |
+          {
+            echo "This job exports the Android New Vegas-oriented OpenNevada candidate."
+            echo "It does not establish Fallout 3 campaign support, SAF integration, touch-control integration, or device performance."
+            echo "Pinned source: openconstruct/OpenNevada-Android@d22b6c5ae5f83254e25ee9e311661299eb50da73"
+          } >> "$GITHUB_STEP_SUMMARY"
+ "$RUNNER_TEMP/apk-files.txt"
 
       - name: Upload experimental APK
         uses: actions/upload-artifact@v4
