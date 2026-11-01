@@ -7,6 +7,9 @@ android {
     namespace = "com.projectcapital.android"
     compileSdk = 35
 
+    // Storage Access Framework document-tree support
+    // (DocumentFile is used to inspect the selected game directory).
+
     defaultConfig {
         applicationId = "com.projectcapital.android"
         minSdk = 26
@@ -36,4 +39,9 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+}
+
+
+dependencies {
+    implementation("androidx.documentfile:documentfile:1.0.1")
 }
