@@ -143,7 +143,9 @@ public class GodotApp extends GodotActivity {
     }
 
     private File importMarker() {
-        return new File(getFilesDir(), "fallout3-install-path.txt");
+        File userData = new File(new File(getFilesDir(), "app_userdata"), "Project Capital");
+        if (!userData.exists() && !userData.mkdirs()) throw new IllegalStateException("cannot create Godot user data directory");
+        return new File(userData, "fallout3-install-path.txt");
     }
 
     private boolean hasImportedFallout3() {
@@ -176,7 +178,7 @@ public class GodotApp extends GodotActivity {
                 File target = new File(getExternalFilesDir(null), "Fallout3");
                 if (target.exists()) deleteRecursively(target);
                 if (!target.mkdirs() && !target.isDirectory()) throw new IOException("cannot create import directory");
-                copyDocumentTree(treeUri, target);
+                copyDocumentTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri), target);
                 writeText(importMarker(), target.getAbsolutePath());
                 mainHandler.post(() -> {
                     Toast.makeText(this, "Fallout 3 imported. restarting...", Toast.LENGTH_LONG).show();
@@ -208,29 +210,30 @@ public class GodotApp extends GodotActivity {
         if (!exe || !data) throw new IOException("Fallout3.exe and Data/ are required at the selected folder root");
     }
 
-    private void copyDocumentTree(Uri treeUri, File target) throws IOException {
-        Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri));
+    private void copyDocumentTree(Uri treeUri, String parentDocumentId, File target) throws IOException {
+        Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocumentId);
         try (Cursor cursor = getContentResolver().query(children,
                 new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE},
                 null, null, null)) {
             if (cursor == null) throw new IOException("cannot enumerate selected folder");
-            int idCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID);
-            int nameCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME);
-            int mimeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE);
+            int idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID);
+            int nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME);
+            int mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE);
             while (cursor.moveToNext()) {
                 String id = cursor.getString(idCol);
                 String name = cursor.getString(nameCol);
                 String mime = cursor.getString(mimeCol);
-                if (name == null || name.contains("/")) continue;
-                Uri child = DocumentsContract.buildDocumentUriUsingTree(treeUri, id);
+                if (name == null || name.isEmpty() || name.equals(".") || name.equals("..") || name.contains("/") || name.contains("\\\\")) continue;
                 File out = new File(target, name);
                 if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
                     if (!out.mkdirs() && !out.isDirectory()) throw new IOException("cannot create " + out);
-                    copyDocumentTree(child, out);
+                    copyDocumentTree(treeUri, id, out);
                 } else {
-                    try (InputStream in = new BufferedInputStream(getContentResolver().openInputStream(child));
+                    Uri child = DocumentsContract.buildDocumentUriUsingTree(treeUri, id);
+                    InputStream raw = getContentResolver().openInputStream(child);
+                    if (raw == null) throw new IOException("cannot open " + name);
+                    try (InputStream in = new BufferedInputStream(raw);
                          OutputStream os = new BufferedOutputStream(new FileOutputStream(out))) {
-                        if (in == null) throw new IOException("cannot open " + child);
                         byte[] buffer = new byte[1024 * 1024];
                         int count;
                         while ((count = in.read(buffer)) != -1) os.write(buffer, 0, count);
@@ -239,7 +242,6 @@ public class GodotApp extends GodotActivity {
             }
         }
     }
-
     private static void deleteRecursively(File file) {
         if (file.isDirectory()) {
             File[] children = file.listFiles();
