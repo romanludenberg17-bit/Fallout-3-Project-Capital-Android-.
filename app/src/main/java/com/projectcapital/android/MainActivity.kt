@@ -9,19 +9,44 @@ import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import androidx.documentfile.provider.DocumentFile
+import org.json.JSONObject
 
 class MainActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("project_capital", MODE_PRIVATE) }
     private lateinit var status: TextView
     private lateinit var folderLabel: TextView
+    private lateinit var launchButton: Button
 
     companion object {
         private const val REQUEST_GAME_FOLDER = 4102
         private const val KEY_GAME_TREE = "game_tree_uri"
+        private const val KEY_REGISTRY_PROFILE = "virtual_registry_profile"
+        private const val RUNTIME_MOUNT = "Z:\\\\game\\\\"
     }
+
+    private data class GameInstall(
+        val id: String,
+        val title: String,
+        val executable: String,
+        val registrySubKey: String
+    )
+
+    private val supportedGames = listOf(
+        GameInstall(
+            id = "fallout3",
+            title = "Fallout 3",
+            executable = "Fallout3.exe",
+            registrySubKey = "SOFTWARE\\\\Wow6432Node\\\\Bethesda Softworks\\\\Fallout3"
+        ),
+        GameInstall(
+            id = "falloutnv",
+            title = "Fallout: New Vegas",
+            executable = "FalloutNV.exe",
+            registrySubKey = "SOFTWARE\\\\Wow6432Node\\\\Bethesda Softworks\\\\FalloutNV"
+        )
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,13 +80,12 @@ class MainActivity : Activity() {
         }
         left.layoutParams = LinearLayout.LayoutParams(0, -1, 1.15f)
 
-        val eyebrow = text("VAULT-TEC FIELD SYSTEM  /  ANDROID", 11, accent)
-        left.addView(eyebrow)
-        left.addView(text("PROJECT\nCAPITAL", 34, Color.WHITE, true).apply {
+        left.addView(text("VAULT-TEC FIELD SYSTEM  /  ANDROID", 11, accent))
+        left.addView(text("PROJECT\\nCAPITAL", 34, Color.WHITE, true).apply {
             setPadding(0, dp(12), 0, dp(8))
         })
         left.addView(text("fallout 3 · native android port project", 14, Color.LTGRAY))
-        left.addView(text("prototype 0.1.0", 11, Color.GRAY).apply {
+        left.addView(text("prototype 0.2.0 · registry bridge groundwork", 11, Color.GRAY).apply {
             setPadding(0, dp(18), 0, 0)
         })
 
@@ -83,13 +107,12 @@ class MainActivity : Activity() {
         choose.setOnClickListener { openFolderPicker() }
         right.addView(choose)
 
-        val launch = button("LAUNCH GAME", Color.rgb(75, 88, 83))
-        launch.isEnabled = false
-        launch.alpha = 0.55f
-        launch.setOnClickListener {
-            setStatus("engine runtime is not integrated yet")
+        launchButton = button("LAUNCH GAME", Color.rgb(75, 88, 83)).apply {
+            isEnabled = false
+            alpha = 0.55f
+            setOnClickListener { setStatus("engine runtime is not integrated yet; registry profile is prepared") }
         }
-        right.addView(launch.apply { setPadding(0, dp(8), 0, dp(8)) })
+        right.addView(launchButton.apply { setPadding(0, dp(8), 0, dp(8)) })
 
         val settings = button("CUSTOMIZE TOUCH CONTROLS", Color.rgb(62, 88, 77))
         settings.setOnClickListener {
@@ -97,7 +120,7 @@ class MainActivity : Activity() {
         }
         right.addView(settings)
 
-        status = text("select your Fallout 3 installation folder to begin", 12, Color.LTGRAY)
+        status = text("select your Fallout installation folder to begin", 12, Color.LTGRAY)
         status.setPadding(0, dp(16), 0, 0)
         right.addView(status)
 
@@ -140,19 +163,56 @@ class MainActivity : Activity() {
     private fun validateInstallation(uri: Uri) {
         val tree = DocumentFile.fromTreeUri(this, uri)
         if (tree == null || !tree.canRead()) {
+            launchButton.isEnabled = false
+            launchButton.alpha = 0.55f
             setStatus("cannot read this folder; select the game directory again")
             return
         }
 
         val files = tree.listFiles()
-        val hasExe = files.any { it.name.equals("Fallout3.exe", ignoreCase = true) }
-        val hasData = files.any { it.isDirectory && it.name.equals("Data", ignoreCase = true) }
+        val detected = supportedGames.mapNotNull { game ->
+            val executableFound = files.any { it.isFile && it.name.equals(game.executable, true) }
+            val dataFound = files.any { it.isDirectory && it.name.equals("Data", true) }
+            if (executableFound && dataFound) game else null
+        }
 
         folderLabel.text = tree.name ?: "selected game folder"
-        when {
-            hasExe && hasData -> setStatus("installation layout detected · engine port not yet integrated")
-            else -> setStatus("folder saved, but Fallout3.exe and/or Data were not found at its root")
+        if (detected.isEmpty()) {
+            prefs.edit().remove(KEY_REGISTRY_PROFILE).apply()
+            launchButton.isEnabled = false
+            launchButton.alpha = 0.55f
+            setStatus("no supported game found at this folder root; expected Fallout3.exe or FalloutNV.exe and Data/")
+            return
         }
+
+        // SAF exposes a content:// URI, not a stable POSIX path. The registry bridge
+        // therefore records the selected tree and a runtime mount target separately.
+        // The future engine/runtime must mount this tree at Z:\\game before consuming
+        // the Installed Path registry value. This does NOT write to Android's registry.
+        val profiles = JSONObject()
+        detected.forEach { game ->
+            profiles.put(game.id, JSONObject().apply {
+                put("title", game.title)
+                put("registryRoot", "HKEY_LOCAL_MACHINE\\\\${game.registrySubKey}")
+                put("valueName", "Installed Path")
+                put("valueType", "REG_SZ")
+                put("valueData", RUNTIME_MOUNT)
+                put("executable", game.executable)
+            })
+        }
+        val profile = JSONObject().apply {
+            put("schemaVersion", 1)
+            put("sourceTreeUri", uri.toString())
+            put("runtimeMount", RUNTIME_MOUNT)
+            put("games", profiles)
+            put("requiresRuntimeRegistryAdapter", true)
+        }
+        prefs.edit().putString(KEY_REGISTRY_PROFILE, profile.toString()).apply()
+
+        launchButton.isEnabled = false
+        launchButton.alpha = 0.55f
+        val names = detected.joinToString(" + ") { it.title }
+        setStatus("$names detected · virtual Installed Path profiles prepared · runtime integration still required")
     }
 
     private fun setStatus(message: String) {
