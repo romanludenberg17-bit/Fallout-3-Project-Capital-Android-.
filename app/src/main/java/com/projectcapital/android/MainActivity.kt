@@ -23,7 +23,7 @@ class MainActivity : Activity() {
         private const val REQUEST_GAME_FOLDER = 4102
         private const val KEY_GAME_TREE = "game_tree_uri"
         private const val KEY_REGISTRY_PROFILE = "virtual_registry_profile"
-        private const val RUNTIME_MOUNT = "Z:\\\\game\\\\"
+        private const val RUNTIME_MOUNT = """Z:\\game\\"""
     }
 
     private data class GameInstall(
@@ -38,13 +38,13 @@ class MainActivity : Activity() {
             id = "fallout3",
             title = "Fallout 3",
             executable = "Fallout3.exe",
-            registrySubKey = "SOFTWARE\\\\Wow6432Node\\\\Bethesda Softworks\\\\Fallout3"
+            registrySubKey = """SOFTWARE\\Wow6432Node\\Bethesda Softworks\\Fallout3"""
         ),
         GameInstall(
             id = "falloutnv",
             title = "Fallout: New Vegas",
             executable = "FalloutNV.exe",
-            registrySubKey = "SOFTWARE\\\\Wow6432Node\\\\Bethesda Softworks\\\\FalloutNV"
+            registrySubKey = """SOFTWARE\\Wow6432Node\\Bethesda Softworks\\FalloutNV"""
         )
     )
 
@@ -193,7 +193,7 @@ class MainActivity : Activity() {
         detected.forEach { game ->
             profiles.put(game.id, JSONObject().apply {
                 put("title", game.title)
-                put("registryRoot", "HKEY_LOCAL_MACHINE\\\\${game.registrySubKey}")
+                put("registryRoot", "HKEY_LOCAL_MACHINE\\${game.registrySubKey}")
                 put("valueName", "Installed Path")
                 put("valueType", "REG_SZ")
                 put("valueData", RUNTIME_MOUNT)
