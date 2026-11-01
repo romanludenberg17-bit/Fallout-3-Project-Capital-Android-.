@@ -107,169 +107,169 @@ jobs:
           activity = Path('runtime/android/build/src/com/godot/game/GodotApp.java')
           activity.write_text(r'''package com.godot.game;
 
-import android.app.Activity;
-import android.content.Intent;
-import android.database.Cursor;
-import android.net.Uri;
-import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
-import android.provider.DocumentsContract;
-import android.provider.OpenableColumns;
-import android.widget.Toast;
+          import android.app.Activity;
+          import android.content.Intent;
+          import android.database.Cursor;
+          import android.net.Uri;
+          import android.os.Bundle;
+          import android.os.Handler;
+          import android.os.Looper;
+          import android.provider.DocumentsContract;
+          import android.provider.OpenableColumns;
+          import android.widget.Toast;
 
-import org.godotengine.godot.GodotActivity;
+          import org.godotengine.godot.GodotActivity;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+          import java.io.BufferedInputStream;
+          import java.io.BufferedOutputStream;
+          import java.io.File;
+          import java.io.FileInputStream;
+          import java.io.FileOutputStream;
+          import java.io.IOException;
+          import java.io.InputStream;
+          import java.io.OutputStream;
 
-public class GodotApp extends GodotActivity {
-    private static final int REQUEST_GAME_TREE = 4703;
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+          public class GodotApp extends GodotActivity {
+          private static final int REQUEST_GAME_TREE = 4703;
+          private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
-    @Override
-    public void onCreate(Bundle savedInstanceState) {
-        setTheme(R.style.GodotAppMainTheme);
-        super.onCreate(savedInstanceState);
-        if (savedInstanceState == null && !hasImportedFallout3()) {
-            mainHandler.postDelayed(this::openGameFolderPicker, 1200);
-        }
-    }
+          @Override
+          public void onCreate(Bundle savedInstanceState) {
+          setTheme(R.style.GodotAppMainTheme);
+          super.onCreate(savedInstanceState);
+          if (savedInstanceState == null && !hasImportedFallout3()) {
+          mainHandler.postDelayed(this::openGameFolderPicker, 1200);
+          }
+          }
 
-    private File importMarker() {
-        File userData = new File(new File(getFilesDir(), "app_userdata"), "Project Capital");
-        if (!userData.exists() && !userData.mkdirs()) throw new IllegalStateException("cannot create Godot user data directory");
-        return new File(userData, "fallout3-install-path.txt");
-    }
+          private File importMarker() {
+          File userData = new File(new File(getFilesDir(), "app_userdata"), "Project Capital");
+          if (!userData.exists() && !userData.mkdirs()) throw new IllegalStateException("cannot create Godot user data directory");
+          return new File(userData, "fallout3-install-path.txt");
+          }
 
-    private boolean hasImportedFallout3() {
-        String path = readText(importMarker());
-        if (path == null || path.isEmpty()) return false;
-        File root = new File(path);
-        return new File(root, "Fallout3.exe").isFile() && new File(root, "Data").isDirectory();
-    }
+          private boolean hasImportedFallout3() {
+          String path = readText(importMarker());
+          if (path == null || path.isEmpty()) return false;
+          File root = new File(path);
+          return new File(root, "Fallout3.exe").isFile() && new File(root, "Data").isDirectory();
+          }
 
-    private void openGameFolderPicker() {
-        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-        startActivityForResult(intent, REQUEST_GAME_TREE);
-    }
+          private void openGameFolderPicker() {
+          Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+          intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+          startActivityForResult(intent, REQUEST_GAME_TREE);
+          }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != REQUEST_GAME_TREE || resultCode != Activity.RESULT_OK || data == null || data.getData() == null) return;
-        Uri treeUri = data.getData();
-        try {
-            int takeFlags = data.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION;
-            getContentResolver().takePersistableUriPermission(treeUri, takeFlags);
-        } catch (SecurityException ignored) {
-        }
-        Toast.makeText(this, "importing Fallout 3 files...", Toast.LENGTH_LONG).show();
-        new Thread(() -> {
-            try {
-                validateRoot(treeUri);
-                File target = new File(getExternalFilesDir(null), "Fallout3");
-                if (target.exists()) deleteRecursively(target);
-                if (!target.mkdirs() && !target.isDirectory()) throw new IOException("cannot create import directory");
-                copyDocumentTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri), target);
-                writeText(importMarker(), target.getAbsolutePath());
-                mainHandler.post(() -> {
-                    Toast.makeText(this, "Fallout 3 imported. restarting...", Toast.LENGTH_LONG).show();
-                    mainHandler.postDelayed(this::recreate, 900);
-                });
-            } catch (Exception e) {
-                mainHandler.post(() -> Toast.makeText(this, "Fallout 3 import failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
-            }
-        }, "fallout3-import").start();
-    }
+          @Override
+          protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+          super.onActivityResult(requestCode, resultCode, data);
+          if (requestCode != REQUEST_GAME_TREE || resultCode != Activity.RESULT_OK || data == null || data.getData() == null) return;
+          Uri treeUri = data.getData();
+          try {
+          int takeFlags = data.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION;
+          getContentResolver().takePersistableUriPermission(treeUri, takeFlags);
+          } catch (SecurityException ignored) {
+          }
+          Toast.makeText(this, "importing Fallout 3 files...", Toast.LENGTH_LONG).show();
+          new Thread(() -> {
+          try {
+          validateRoot(treeUri);
+          File target = new File(getExternalFilesDir(null), "Fallout3");
+          if (target.exists()) deleteRecursively(target);
+          if (!target.mkdirs() && !target.isDirectory()) throw new IOException("cannot create import directory");
+          copyDocumentTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri), target);
+          writeText(importMarker(), target.getAbsolutePath());
+          mainHandler.post(() -> {
+          Toast.makeText(this, "Fallout 3 imported. restarting...", Toast.LENGTH_LONG).show();
+          mainHandler.postDelayed(this::recreate, 900);
+          });
+          } catch (Exception e) {
+          mainHandler.post(() -> Toast.makeText(this, "Fallout 3 import failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+          }
+          }, "fallout3-import").start();
+          }
 
-    private void validateRoot(Uri treeUri) throws IOException {
-        Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri));
-        boolean exe = false;
-        boolean data = false;
-        try (Cursor cursor = getContentResolver().query(children,
-                new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE},
-                null, null, null)) {
-            if (cursor == null) throw new IOException("cannot enumerate selected folder");
-            int nameCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME);
-            int mimeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE);
-            while (cursor.moveToNext()) {
-                String name = cursor.getString(nameCol);
-                String mime = cursor.getString(mimeCol);
-                if ("Fallout3.exe".equals(name)) exe = true;
-                if ("Data".equals(name) && DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) data = true;
-            }
-        }
-        if (!exe || !data) throw new IOException("Fallout3.exe and Data/ are required at the selected folder root");
-    }
+          private void validateRoot(Uri treeUri) throws IOException {
+          Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri));
+          boolean exe = false;
+          boolean data = false;
+          try (Cursor cursor = getContentResolver().query(children,
+          new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE},
+          null, null, null)) {
+          if (cursor == null) throw new IOException("cannot enumerate selected folder");
+          int nameCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME);
+          int mimeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE);
+          while (cursor.moveToNext()) {
+          String name = cursor.getString(nameCol);
+          String mime = cursor.getString(mimeCol);
+          if ("Fallout3.exe".equals(name)) exe = true;
+          if ("Data".equals(name) && DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) data = true;
+          }
+          }
+          if (!exe || !data) throw new IOException("Fallout3.exe and Data/ are required at the selected folder root");
+          }
 
-    private void copyDocumentTree(Uri treeUri, String parentDocumentId, File target) throws IOException {
-        Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocumentId);
-        try (Cursor cursor = getContentResolver().query(children,
-                new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE},
-                null, null, null)) {
-            if (cursor == null) throw new IOException("cannot enumerate selected folder");
-            int idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID);
-            int nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME);
-            int mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE);
-            while (cursor.moveToNext()) {
-                String id = cursor.getString(idCol);
-                String name = cursor.getString(nameCol);
-                String mime = cursor.getString(mimeCol);
-                if (name == null || name.isEmpty() || name.equals(".") || name.equals("..") || name.contains("/") || name.contains("\\\\")) continue;
-                File out = new File(target, name);
-                if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
-                    if (!out.mkdirs() && !out.isDirectory()) throw new IOException("cannot create " + out);
-                    copyDocumentTree(treeUri, id, out);
-                } else {
-                    Uri child = DocumentsContract.buildDocumentUriUsingTree(treeUri, id);
-                    InputStream raw = getContentResolver().openInputStream(child);
-                    if (raw == null) throw new IOException("cannot open " + name);
-                    try (InputStream in = new BufferedInputStream(raw);
-                         OutputStream os = new BufferedOutputStream(new FileOutputStream(out))) {
-                        byte[] buffer = new byte[1024 * 1024];
-                        int count;
-                        while ((count = in.read(buffer)) != -1) os.write(buffer, 0, count);
-                    }
-                }
-            }
-        }
-    }
-    private static void deleteRecursively(File file) {
-        if (file.isDirectory()) {
-            File[] children = file.listFiles();
-            if (children != null) for (File child : children) deleteRecursively(child);
-        }
-        file.delete();
-    }
+          private void copyDocumentTree(Uri treeUri, String parentDocumentId, File target) throws IOException {
+          Uri children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocumentId);
+          try (Cursor cursor = getContentResolver().query(children,
+          new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE},
+          null, null, null)) {
+          if (cursor == null) throw new IOException("cannot enumerate selected folder");
+          int idCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID);
+          int nameCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME);
+          int mimeCol = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE);
+          while (cursor.moveToNext()) {
+          String id = cursor.getString(idCol);
+          String name = cursor.getString(nameCol);
+          String mime = cursor.getString(mimeCol);
+          if (name == null || name.isEmpty() || name.equals(".") || name.equals("..") || name.contains("/") || name.contains("\\\\")) continue;
+          File out = new File(target, name);
+          if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
+          if (!out.mkdirs() && !out.isDirectory()) throw new IOException("cannot create " + out);
+          copyDocumentTree(treeUri, id, out);
+          } else {
+          Uri child = DocumentsContract.buildDocumentUriUsingTree(treeUri, id);
+          InputStream raw = getContentResolver().openInputStream(child);
+          if (raw == null) throw new IOException("cannot open " + name);
+          try (InputStream in = new BufferedInputStream(raw);
+          OutputStream os = new BufferedOutputStream(new FileOutputStream(out))) {
+          byte[] buffer = new byte[1024 * 1024];
+          int count;
+          while ((count = in.read(buffer)) != -1) os.write(buffer, 0, count);
+          }
+          }
+          }
+          }
+          }
+          private static void deleteRecursively(File file) {
+          if (file.isDirectory()) {
+          File[] children = file.listFiles();
+          if (children != null) for (File child : children) deleteRecursively(child);
+          }
+          file.delete();
+          }
 
-    private static String readText(File file) {
-        try {
-            byte[] data = java.nio.file.Files.readAllBytes(file.toPath());
-            return new String(data, java.nio.charset.StandardCharsets.UTF_8).trim();
-        } catch (IOException e) {
-            return null;
-        }
-    }
+          private static String readText(File file) {
+          try {
+          byte[] data = java.nio.file.Files.readAllBytes(file.toPath());
+          return new String(data, java.nio.charset.StandardCharsets.UTF_8).trim();
+          } catch (IOException e) {
+          return null;
+          }
+          }
 
-    private static void writeText(File file, String value) throws IOException {
-        try (FileOutputStream out = new FileOutputStream(file)) {
-            out.write(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        }
-    }
+          private static void writeText(File file, String value) throws IOException {
+          try (FileOutputStream out = new FileOutputStream(file)) {
+          out.write(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+          }
+          }
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-    }
-}
+          @Override
+          protected void onDestroy() {
+          super.onDestroy();
+          }
+          }
 ''')
           PY
           grep -Fq 'gradle_build/use_gradle_build=true' runtime/export_presets.cfg
