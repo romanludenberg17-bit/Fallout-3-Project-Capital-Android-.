@@ -55,8 +55,11 @@ jobs:
           curl -L --fail --retry 5 --retry-all-errors -o "$RUNNER_TEMP/godot/godot.zip" "$GODOT_RELEASE/Godot_v4.7.2-stable_mono_linux_x86_64.zip"
           unzip -tq "$RUNNER_TEMP/godot/godot.zip"
           unzip -q "$RUNNER_TEMP/godot/godot.zip" -d "$RUNNER_TEMP/godot/editor"
-          GODOT_BIN="$(find "$RUNNER_TEMP/godot/editor" -type f -name godot.mono -print -quit)"
+          GODOT_BIN="$(find "$RUNNER_TEMP/godot/editor" -type f -name "Godot_*_mono_linux.*" -print -quit)"
+          if [ -z "$GODOT_BIN" ]; then find "$RUNNER_TEMP/godot/editor" -maxdepth 2 -type f -printf "%p\n"; exit 1; fi
+          chmod +x "$GODOT_BIN"
           test -x "$GODOT_BIN"
+          "$GODOT_BIN" --version
           echo "GODOT_BIN=$GODOT_BIN" >> "$GITHUB_ENV"
           mkdir -p "$HOME/.local/share/godot/export_templates/4.7.2.stable.mono"
           curl -L --fail --retry 5 --retry-all-errors -o "$RUNNER_TEMP/godot/templates.tpz" "$GODOT_RELEASE/Godot_v4.7.2-stable_mono_export_templates.tpz"
