@@ -98,14 +98,186 @@ jobs:
           text = text.replace(old, new, 1)
 
           marker = '''    private bool ImportDataRegistration(string legacyRoot, string campaignId, string fileName)\n'''
-          method = '''    private void ImportAndroidOwnedFallout3Folder()\n    {\n        if (!OperatingSystem.IsAndroid() || _profiles.ContainsKey("fallout3"))\n            return;\n\n        const string defaultRoot = "/storage/emulated/0/ProjectCapital/Fallout3";\n        try\n        {\n            var installation = NativeGameInstallation.Detect(defaultRoot);\n            if (installation.Game != NativeGame.Fallout3)\n                return;\n            _profiles["fallout3"] = new GodotLauncherProfile(\n                "fallout3",\n                installation.InstallRoot,\n                SavePath("fallout3"));\n            _lastCampaignId = "fallout3";\n            Persist();\n            GD.Print($"OPENNV_ANDROID_FO3_PROFILE path={installation.InstallRoot}");\n        }\n        catch (Exception exception) when (\n            exception is DirectoryNotFoundException or InvalidDataException or IOException or UnauthorizedAccessException)\n        {\n            GD.Print($"OPENNV_ANDROID_FO3_PROFILE unavailable path={defaultRoot} reason={exception.Message}");\n        }\n    }\n\n'''
+          method = '''    private void ImportAndroidOwnedFallout3Folder()\n    {\n        if (!OperatingSystem.IsAndroid() || _profiles.ContainsKey("fallout3"))\n            return;\n\n        var pathFile = ProjectSettings.GlobalizePath("user://fallout3-install-path.txt");\n        try\n        {\n            if (!File.Exists(pathFile))\n                return;\n            var defaultRoot = File.ReadAllText(pathFile).Trim();\n            if (string.IsNullOrWhiteSpace(defaultRoot))\n                return;\n            var installation = NativeGameInstallation.Detect(defaultRoot);\n            if (installation.Game != NativeGame.Fallout3)\n                return;\n            _profiles["fallout3"] = new GodotLauncherProfile(\n                "fallout3",\n                installation.InstallRoot,\n                SavePath("fallout3"));\n            _lastCampaignId = "fallout3";\n            Persist();\n            GD.Print($"OPENNV_ANDROID_FO3_PROFILE path={installation.InstallRoot}");\n        }\n        catch (Exception exception) when (\n            exception is DirectoryNotFoundException or InvalidDataException or IOException or UnauthorizedAccessException)\n        {\n            GD.Print($"OPENNV_ANDROID_FO3_PROFILE unavailable file={pathFile} reason={exception.Message}");\n        }\n    }\n\n'''
           if marker not in text:
               raise SystemExit("profile insertion marker not found")
           text = text.replace(marker, method + marker, 1)
           store.write_text(text)
           PY
-          grep -Fq 'permissions/manage_external_storage=true' runtime/export_presets.cfg
           grep -Fq 'ImportAndroidOwnedFallout3Folder' runtime/src/Presentation/Ui/GodotLauncherProfileStore.cs
+
+      - name: Install and customize Android Gradle template
+        working-directory: runtime-candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$GODOT_BIN" --headless --path runtime --install-android-build-template
+          test -f runtime/android/build.gradle
+          test -f runtime/android/build/src/com/godot/game/GodotApp.java
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          presets = Path("runtime/export_presets.cfg")
+          text = presets.read_text()
+          text = text.replace('gradle_build/use_gradle_build=false', 'gradle_build/use_gradle_build=true', 1)
+          presets.write_text(text)
+
+          activity = Path("runtime/android/build/src/com/godot/game/GodotApp.java")
+          activity.write_text(r'''package com.godot.game;
+
+import android.app.Activity;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.widget.Toast;
+
+import androidx.documentfile.provider.DocumentFile;
+
+import org.godotengine.godot.GodotActivity;
+
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class GodotApp extends GodotActivity {
+    private static final int REQUEST_GAME_TREE = 4703;
+    private final ExecutorService copyExecutor = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        setTheme(R.style.GodotAppMainTheme);
+        super.onCreate(savedInstanceState);
+        if (savedInstanceState == null && !hasImportedFallout3()) {
+            mainHandler.postDelayed(this::openGameFolderPicker, 1200);
+        }
+    }
+
+    private File importMarker() {
+        return new File(getFilesDir(), "fallout3-install-path.txt");
+    }
+
+    private boolean hasImportedFallout3() {
+        File marker = importMarker();
+        if (!marker.isFile()) return false;
+        String path = readText(marker);
+        if (path == null || path.isEmpty()) return false;
+        File root = new File(path);
+        return new File(root, "Fallout3.exe").isFile() && new File(root, "Data").isDirectory();
+    }
+
+    private void openGameFolderPicker() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(intent, REQUEST_GAME_TREE);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_GAME_TREE || resultCode != Activity.RESULT_OK || data == null || data.getData() == null) {
+            return;
+        }
+        Uri treeUri = data.getData();
+        try {
+            getContentResolver().takePersistableUriPermission(treeUri, data.getFlags() & Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (SecurityException ignored) {
+        }
+        Toast.makeText(this, "importing Fallout 3 files…", Toast.LENGTH_LONG).show();
+        copyExecutor.execute(() -> {
+            try {
+                DocumentFile root = DocumentFile.fromTreeUri(this, treeUri);
+                if (root == null || !root.isDirectory()) throw new IOException("selected item is not a folder");
+                DocumentFile exe = root.findFile("Fallout3.exe");
+                DocumentFile dataDir = root.findFile("Data");
+                if (exe == null || !exe.isFile() || dataDir == null || !dataDir.isDirectory()) {
+                    throw new IOException("Fallout3.exe and Data/ are required at the selected folder root");
+                }
+
+                File target = new File(getExternalFilesDir(null), "Fallout3");
+                if (target.exists()) deleteRecursively(target);
+                if (!target.mkdirs() && !target.isDirectory()) throw new IOException("cannot create import directory");
+                copyTree(root, target);
+                writeText(importMarker(), target.getAbsolutePath());
+                mainHandler.post(() -> {
+                    Toast.makeText(this, "Fallout 3 imported. restarting…", Toast.LENGTH_LONG).show();
+                    mainHandler.postDelayed(this::recreate, 900);
+                });
+            } catch (Exception e) {
+                mainHandler.post(() -> Toast.makeText(this, "Fallout 3 import failed: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        });
+    }
+
+    private void copyTree(DocumentFile source, File target) throws IOException {
+        for (DocumentFile child : source.listFiles()) {
+            String name = child.getName();
+            if (name == null || name.contains("/")) continue;
+            File out = new File(target, name);
+            if (child.isDirectory()) {
+                if (!out.mkdirs() && !out.isDirectory()) throw new IOException("cannot create " + out);
+                copyTree(child, out);
+            } else if (child.isFile()) {
+                try (InputStream in = new BufferedInputStream(getContentResolver().openInputStream(child.getUri()));
+                     OutputStream os = new BufferedOutputStream(new FileOutputStream(out))) {
+                    if (in == null) throw new IOException("cannot open " + child.getUri());
+                    byte[] buffer = new byte[1024 * 1024];
+                    int count;
+                    while ((count = in.read(buffer)) != -1) os.write(buffer, 0, count);
+                }
+            }
+        }
+    }
+
+    private static void deleteRecursively(File file) {
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) for (File child : children) deleteRecursively(child);
+        }
+        file.delete();
+    }
+
+    private static String readText(File file) {
+        try {
+            byte[] data = java.nio.file.Files.readAllBytes(file.toPath());
+            return new String(data, java.nio.charset.StandardCharsets.UTF_8).trim();
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    private static void writeText(File file, String value) throws IOException {
+        try (FileOutputStream out = new FileOutputStream(file)) {
+            out.write(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        copyExecutor.shutdownNow();
+        super.onDestroy();
+    }
+}
+''')
+
+          manifest = Path("runtime/android/build/AndroidManifest.xml")
+          if manifest.exists():
+              text = manifest.read_text()
+              text = text.replace('android.permission.READ_EXTERNAL_STORAGE', 'android.permission.READ_EXTERNAL_STORAGE', 1)
+              manifest.write_text(text)
+          PY
+          grep -Fq 'gradle_build/use_gradle_build=true' runtime/export_presets.cfg
+          grep -Fq 'REQUEST_GAME_TREE' runtime/android/build/src/com/godot/game/GodotApp.java
 
       - name: Brand runtime for Project Capital
         working-directory: runtime-candidate
@@ -159,6 +331,7 @@ jobs:
           unzip -Z1 "$APK" | tee "$RUNNER_TEMP/apk-files.txt"
           grep -q '^lib/arm64-v8a/' "$RUNNER_TEMP/apk-files.txt"
           grep -q '^lib/arm64-v8a/libgodot_android.so$' "$RUNNER_TEMP/apk-files.txt"
+          unzip -Z1 "$APK" | grep -q 'classes.dex$'
 
       - name: Upload experimental APK
         uses: actions/upload-artifact@v4
